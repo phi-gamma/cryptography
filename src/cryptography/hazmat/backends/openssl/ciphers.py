@@ -78,7 +78,8 @@ class _CipherContext(object):
                 len(iv_nonce), self._backend._ffi.NULL
             )
             self._backend.openssl_assert(res != 0)
-            if operation == self._DECRYPT:
+
+            if operation == self._DECRYPT and mode.tag is not None:
                 res = self._backend._lib.EVP_CIPHER_CTX_ctrl(
                     ctx, self._backend._lib.EVP_CTRL_GCM_SET_TAG,
                     len(mode.tag), mode.tag
@@ -117,6 +118,19 @@ class _CipherContext(object):
         # and is harmless for all other versions of OpenSSL.
         if isinstance(self._mode, modes.GCM):
             self.update(b"")
+
+        if self._operation == self._DECRYPT:
+            if isinstance(self._mode, modes.ModeWithAuthenticationTag):
+                tag = self._mode.tag
+                if tag is None:
+                    raise ValueError(
+                        "Authentication tag must be provided when decrypting."
+                    )
+            res = self._backend._lib.EVP_CIPHER_CTX_ctrl(
+                self._ctx, self._backend._lib.EVP_CTRL_GCM_SET_TAG,
+                len(tag), tag
+            )
+            self._backend.openssl_assert(res != 0)
 
         buf = self._backend._ffi.new("unsigned char[]", self._block_size_bytes)
         outlen = self._backend._ffi.new("int *")
